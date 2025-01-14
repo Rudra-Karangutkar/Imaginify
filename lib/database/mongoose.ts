@@ -1,4 +1,3 @@
-import { error } from "console";
 import mongoose, { Mongoose } from "mongoose";
 
 const MONGODB_URL = process.env.MONGODB_URL;
@@ -8,23 +7,39 @@ interface MongooseConnection {
     promise: Promise<Mongoose> | null;
 }
 
-let cached: MongooseConnection = (global as any).mongoose
-
-if(!cached){
-    cached = (global as any).mongoose = {
-        conn: null,
-        promise: null
+// Extend the NodeJS.Global interface to include mongoose
+declare global {
+    namespace NodeJS {
+        interface Global {
+            mongoose: MongooseConnection | undefined;
+        }
     }
 }
 
-export const connectToDatabase = async () => {
-    if(cached.conn) return cached.conn;
+// Use a cached global variable to prevent multiple connections in development
+let cached: MongooseConnection = global.mongoose || { conn: null, promise: null };
 
-    if(!MONGODB_URL) throw new Error('Missing MONGODB_URL')
+if (!cached) {
+    cached = { conn: null, promise: null };
+    global.mongoose = cached;
+}
 
-    cached.promise = cached.promise || mongoose.connect(MONGODB_URL, {dbName: 'imaginify', bufferCommands: false})
+export const connectToDatabase = async (): Promise<Mongoose> => {
+    if (cached.conn) {
+        return cached.conn;
+    }
+
+    if (!MONGODB_URL) {
+        throw new Error("Missing MONGODB_URL");
+    }
+
+    if (!cached.promise) {
+        cached.promise = mongoose.connect(MONGODB_URL, {
+            dbName: "imaginify",
+            bufferCommands: false,
+        });
+    }
 
     cached.conn = await cached.promise;
-
     return cached.conn;
-}
+};
